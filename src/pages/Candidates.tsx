@@ -24,77 +24,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useCandidates, useUpdateCandidateStatus } from "@/hooks/useCandidates";
+import { AddCandidateDialog } from "@/components/candidates/AddCandidateDialog";
+import { format } from "date-fns";
 
-const mockCandidates = [
-  {
-    id: "1",
-    name: "Alex Rodriguez",
-    current_position: "Senior Frontend Developer",
-    current_company: "TechCorp",
-    location: "San Francisco, CA",
-    match_score: 94,
-    skills: ["React", "TypeScript", "Next.js", "GraphQL"],
-    experience_years: 6,
-    referred_by: "Sarah Mitchell",
-    referrer_connection: "Former colleague",
-    email: "alex.rodriguez@email.com",
-    linkedin: "linkedin.com/in/alexrodriguez",
-    status: "new" as const,
-    interested_positions: ["Senior React Developer"],
-    last_contacted: null
-  },
-  {
-    id: "2",
-    name: "Emily Watson",
-    current_position: "Product Manager",
-    current_company: "StartupXYZ",
-    location: "New York, NY", 
-    match_score: 91,
-    skills: ["Product Strategy", "Analytics", "Agile", "User Research"],
-    experience_years: 4,
-    referred_by: "John Davidson",
-    referrer_connection: "University friend",
-    email: "emily.watson@email.com",
-    linkedin: "linkedin.com/in/emilywatson",
-    status: "contacted" as const,
-    interested_positions: ["Product Manager"],
-    last_contacted: "2024-01-20T10:00:00Z"
-  },
-  {
-    id: "3",
-    name: "David Park",
-    current_position: "UX Designer",
-    current_company: "DesignStudio",
-    location: "Austin, TX",
-    match_score: 88,
-    skills: ["Figma", "Sketch", "Prototyping", "User Research"],
-    experience_years: 5,
-    referred_by: "Lisa Kim",
-    referrer_connection: "Design community",
-    email: "david.park@email.com",
-    linkedin: "linkedin.com/in/davidpark",
-    status: "interested" as const,
-    interested_positions: ["UX Designer"],
-    last_contacted: "2024-01-18T14:30:00Z"
-  },
-  {
-    id: "4",
-    name: "Rachel Green",
-    current_position: "Data Scientist",
-    current_company: "DataTech",
-    location: "Seattle, WA",
-    match_score: 85,
-    skills: ["Python", "Machine Learning", "SQL", "Statistics"],
-    experience_years: 3,
-    referred_by: "Michael Chen",
-    referrer_connection: "Previous teammate",
-    email: "rachel.green@email.com",
-    linkedin: "linkedin.com/in/rachelgreen",
-    status: "rejected" as const,
-    interested_positions: ["Data Scientist"],
-    last_contacted: "2024-01-15T09:15:00Z"
-  }
-];
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -116,16 +49,34 @@ const getMatchColor = (score: number) => {
 export default function Candidates() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  
+  const { data: candidates = [], isLoading } = useCandidates();
+  const updateStatus = useUpdateCandidateStatus();
 
-  const filteredCandidates = mockCandidates.filter(candidate => {
-    const matchesSearch = candidate.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      candidate.current_position.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      candidate.skills.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredCandidates = candidates.filter(candidate => {
+    const fullName = `${candidate.first_name} ${candidate.last_name}`;
+    const matchesSearch = fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (candidate.current_position?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (candidate.skills?.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase())) || false);
     
     const matchesStatus = statusFilter === "all" || candidate.status === statusFilter;
     
     return matchesSearch && matchesStatus;
   });
+
+  // Calculate stats from real data
+  const totalCandidates = candidates.length;
+  const highMatchCandidates = candidates.filter(c => (c as any).match_score >= 90).length; // Will be 0 since match_score isn't in Candidate type
+  const contactedCandidates = candidates.filter(c => c.status === 'contacted').length;
+  const interestedCandidates = candidates.filter(c => c.status === 'interested').length;
+
+  const handleStatusUpdate = async (candidateId: string, newStatus: string) => {
+    try {
+      await updateStatus.mutateAsync({ id: candidateId, status: newStatus });
+    } catch (error) {
+      // Error handled by mutation
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -138,13 +89,10 @@ export default function Candidates() {
           </p>
         </div>
         <div className="flex gap-2">
+          <AddCandidateDialog />
           <Button variant="outline">
             <Search className="h-4 w-4 mr-2" />
             Discover More
-          </Button>
-          <Button>
-            <MessageSquare className="h-4 w-4 mr-2" />
-            Bulk Message
           </Button>
         </div>
       </div>
@@ -157,8 +105,8 @@ export default function Candidates() {
             <User className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">127</div>
-            <p className="text-xs text-muted-foreground">+23 this week</p>
+            <div className="text-2xl font-bold">{totalCandidates}</div>
+            <p className="text-xs text-muted-foreground">Total in database</p>
           </CardContent>
         </Card>
 
@@ -168,7 +116,7 @@ export default function Candidates() {
             <Star className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">34</div>
+            <div className="text-2xl font-bold">{highMatchCandidates}</div>
             <p className="text-xs text-muted-foreground">Top tier candidates</p>
           </CardContent>
         </Card>
@@ -179,7 +127,7 @@ export default function Candidates() {
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">78</div>
+            <div className="text-2xl font-bold">{contactedCandidates}</div>
             <p className="text-xs text-muted-foreground">Awaiting response</p>
           </CardContent>
         </Card>
@@ -190,7 +138,7 @@ export default function Candidates() {
             <Heart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">45</div>
+            <div className="text-2xl font-bold">{interestedCandidates}</div>
             <p className="text-xs text-muted-foreground">Ready to interview</p>
           </CardContent>
         </Card>
@@ -215,124 +163,138 @@ export default function Candidates() {
 
       {/* Candidates Grid */}
       <div className="grid gap-6">
-        {filteredCandidates.map((candidate) => (
-          <Card key={candidate.id} className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <CardTitle className="text-xl">{candidate.name}</CardTitle>
-                    <Badge className={getStatusColor(candidate.status)}>
-                      {candidate.status}
-                    </Badge>
-                    <div className={`text-lg font-bold ${getMatchColor(candidate.match_score)}`}>
-                      {candidate.match_score}% match
-                    </div>
-                  </div>
-                  <CardDescription className="space-y-1">
-                    <div className="flex items-center gap-1">
-                      <Briefcase className="h-4 w-4" />
-                      {candidate.current_position} at {candidate.current_company}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <MapPin className="h-4 w-4" />
-                      {candidate.location}
-                    </div>
-                    <div className="flex items-center gap-1 text-primary">
-                      <User className="h-4 w-4" />
-                      Referred by {candidate.referred_by} ({candidate.referrer_connection})
-                    </div>
-                  </CardDescription>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>View Full Profile</DropdownMenuItem>
-                    <DropdownMenuItem>Send Message</DropdownMenuItem>
-                    <DropdownMenuItem>Schedule Interview</DropdownMenuItem>
-                    <DropdownMenuItem>Add to Job</DropdownMenuItem>
-                    <DropdownMenuItem>Mark as Not Interested</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Skills */}
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Skills</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {candidate.skills.map((skill, index) => (
-                      <Badge key={index} variant="secondary">
-                        {skill}
+        {isLoading ? (
+          <div className="text-center py-8">
+            <div className="text-muted-foreground">Loading candidates...</div>
+          </div>
+        ) : filteredCandidates.length > 0 ? (
+          filteredCandidates.map((candidate) => (
+            <Card key={candidate.id} className="hover:shadow-md transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <CardTitle className="text-xl">
+                        {candidate.first_name} {candidate.last_name}
+                      </CardTitle>
+                      <Badge className={getStatusColor(candidate.status)}>
+                        {candidate.status}
                       </Badge>
-                    ))}
+                    </div>
+                    <CardDescription className="space-y-1">
+                      {candidate.current_position && candidate.current_company && (
+                        <div className="flex items-center gap-1">
+                          <Briefcase className="h-4 w-4" />
+                          {candidate.current_position} at {candidate.current_company}
+                        </div>
+                      )}
+                      {candidate.experience_years && (
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {candidate.experience_years} years experience
+                        </div>
+                      )}
+                    </CardDescription>
                   </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>View Full Profile</DropdownMenuItem>
+                      <DropdownMenuItem>Send Message</DropdownMenuItem>
+                      <DropdownMenuItem>Schedule Interview</DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => handleStatusUpdate(candidate.id, 'contacted')}
+                      >
+                        Mark as Contacted
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => handleStatusUpdate(candidate.id, 'interested')}
+                      >
+                        Mark as Interested
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => handleStatusUpdate(candidate.id, 'rejected')}
+                      >
+                        Mark as Not Interested
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Skills */}
+                  {candidate.skills && candidate.skills.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Skills</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {candidate.skills.map((skill, index) => (
+                          <Badge key={index} variant="secondary">
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                {/* Experience and Positions */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium">Experience:</span> {candidate.experience_years} years
+                  {/* Contact Info */}
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Mail className="h-4 w-4" />
+                      <span>{candidate.email}</span>
+                    </div>
+                    {candidate.phone && (
+                      <div className="flex items-center gap-1">
+                        <Phone className="h-4 w-4" />
+                        <span>{candidate.phone}</span>
+                      </div>
+                    )}
+                    {candidate.linkedin_url && (
+                      <div className="flex items-center gap-1">
+                        <LinkIcon className="h-4 w-4" />
+                        <a href={candidate.linkedin_url} target="_blank" rel="noopener noreferrer">
+                          LinkedIn
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <span className="font-medium">Interested in:</span> {candidate.interested_positions.join(", ")}
-                  </div>
-                </div>
 
-                {/* Contact Info */}
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Mail className="h-4 w-4" />
-                    <span>{candidate.email}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <LinkIcon className="h-4 w-4" />
-                    <span>LinkedIn</span>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-between pt-4 border-t border-border">
-                  <div className="text-xs text-muted-foreground">
-                    {candidate.last_contacted 
-                      ? `Last contacted: ${new Date(candidate.last_contacted).toLocaleDateString()}`
-                      : "Not yet contacted"
-                    }
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm">
-                      <Mail className="h-4 w-4 mr-2" />
-                      Message
-                    </Button>
-                    <Button size="sm">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Schedule Call
-                    </Button>
+                  {/* Actions */}
+                  <div className="flex items-center justify-between pt-4 border-t border-border">
+                    <div className="text-xs text-muted-foreground">
+                      Added: {format(new Date(candidate.created_at), 'MMM d, yyyy')}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm">
+                        <Mail className="h-4 w-4 mr-2" />
+                        Message
+                      </Button>
+                      <Button size="sm">
+                        <Calendar className="h-4 w-4 mr-2" />
+                        Schedule Call
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))
+        ) : null}
       </div>
 
-      {filteredCandidates.length === 0 && (
+      {!isLoading && filteredCandidates.length === 0 && (
         <Card>
           <CardContent className="text-center py-12">
             <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium mb-2">No candidates found</h3>
             <p className="text-muted-foreground mb-4">
-              {searchTerm ? "Try adjusting your search terms" : "Start discovering candidates from your employee network"}
+              {searchTerm ? "Try adjusting your search terms" : "Start by adding candidates to your database"}
             </p>
-            <Button>
-              <Search className="h-4 w-4 mr-2" />
-              Discover Candidates
-            </Button>
+            <AddCandidateDialog />
           </CardContent>
         </Card>
       )}

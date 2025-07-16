@@ -8,8 +8,22 @@ import {
   Plus,
   Search
 } from "lucide-react";
+import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { useJobs } from "@/hooks/useJobs";
+import { useMatchCandidates } from "@/hooks/useMatchCandidates";
+import CreateJobDialog from "@/components/jobs/CreateJobDialog";
+import { useNavigate } from "react-router-dom";
+import { format } from "date-fns";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: jobs, isLoading: jobsLoading } = useJobs();
+  const { data: matchedCandidates, isLoading: candidatesLoading } = useMatchCandidates();
+
+  const recentJobs = jobs?.slice(0, 3) || [];
+  const topCandidates = matchedCandidates?.slice(0, 3) || [];
+
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
@@ -21,11 +35,8 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            New Job Posting
-          </Button>
-          <Button variant="outline">
+          <CreateJobDialog />
+          <Button variant="outline" onClick={() => navigate('/candidates')}>
             <Search className="h-4 w-4 mr-2" />
             Find Candidates
           </Button>
@@ -42,9 +53,11 @@ export default function Dashboard() {
             <Briefcase className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12</div>
+            <div className="text-2xl font-bold">
+              {statsLoading ? "-" : stats?.activeJobs || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
-              +2 from last month
+              +{stats?.monthlyGrowth.jobs || 0} from last month
             </p>
           </CardContent>
         </Card>
@@ -52,14 +65,16 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Employee Networks
+              Total Employees
             </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">47</div>
+            <div className="text-2xl font-bold">
+              {statsLoading ? "-" : stats?.totalEmployees || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Connected employees
+              Registered employees
             </p>
           </CardContent>
         </Card>
@@ -67,14 +82,16 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Network Connections
+              Total Candidates
             </CardTitle>
             <Network className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">2,847</div>
+            <div className="text-2xl font-bold">
+              {statsLoading ? "-" : stats?.totalCandidates || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Total network reach
+              +{stats?.monthlyGrowth.candidates || 0} this month
             </p>
           </CardContent>
         </Card>
@@ -87,9 +104,11 @@ export default function Dashboard() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">23</div>
+            <div className="text-2xl font-bold">
+              {statsLoading ? "-" : stats?.successfulReferrals || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
-              +12% from last month
+              {stats?.monthlyGrowth.referrals ? `+${stats.monthlyGrowth.referrals}%` : '+0%'} from last month
             </p>
           </CardContent>
         </Card>
@@ -106,19 +125,26 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[
-                { title: "Senior React Developer", department: "Engineering", posted: "2 days ago" },
-                { title: "Product Manager", department: "Product", posted: "1 week ago" },
-                { title: "UX Designer", department: "Design", posted: "1 week ago" },
-              ].map((job, index) => (
-                <div key={index} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                  <div>
-                    <p className="font-medium">{job.title}</p>
-                    <p className="text-sm text-muted-foreground">{job.department}</p>
+              {jobsLoading ? (
+                <div className="text-sm text-muted-foreground">Loading...</div>
+              ) : recentJobs.length > 0 ? (
+                recentJobs.map((job) => (
+                  <div key={job.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                    <div>
+                      <p className="font-medium">{job.title}</p>
+                      <p className="text-sm text-muted-foreground">{job.department}</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {format(new Date(job.created_at), 'MMM d')}
+                    </p>
                   </div>
-                  <p className="text-sm text-muted-foreground">{job.posted}</p>
+                ))
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-sm text-muted-foreground mb-2">No job postings yet</p>
+                  <CreateJobDialog />
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>
@@ -132,22 +158,32 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[
-                { name: "Alex Johnson", role: "Senior Developer", match: "94%", source: "via Sarah M." },
-                { name: "Maria Garcia", role: "Product Manager", match: "91%", source: "via John D." },
-                { name: "David Chen", role: "UX Designer", match: "88%", source: "via Lisa K." },
-              ].map((candidate, index) => (
-                <div key={index} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                  <div>
-                    <p className="font-medium">{candidate.name}</p>
-                    <p className="text-sm text-muted-foreground">{candidate.role} • {candidate.source}</p>
+              {candidatesLoading ? (
+                <div className="text-sm text-muted-foreground">Loading...</div>
+              ) : topCandidates.length > 0 ? (
+                topCandidates.map((candidate) => (
+                  <div key={candidate.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                    <div>
+                      <p className="font-medium">{candidate.first_name} {candidate.last_name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {candidate.current_position} • via {candidate.referred_by}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium text-green-600">{candidate.match_score}%</p>
+                      <p className="text-xs text-muted-foreground">match</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium text-green-600">{candidate.match}</p>
-                    <p className="text-xs text-muted-foreground">match</p>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-sm text-muted-foreground mb-2">No candidates yet</p>
+                  <Button variant="outline" onClick={() => navigate('/candidates')}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Candidates
+                  </Button>
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>
